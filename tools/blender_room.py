@@ -12,6 +12,7 @@ mesh object per detected shape (Floor, Wall_1..N, Furniture_1..N), saves a
 
 import json
 import sys
+from pathlib import Path
 
 import bpy
 from mathutils import Matrix, Vector
@@ -19,6 +20,12 @@ from mathutils import Matrix, Vector
 argv = sys.argv[sys.argv.index("--") + 1:]
 shapes_path, blend_path = argv[0], argv[1]
 render_path = argv[2] if len(argv) > 2 else None
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    import furniture_library
+except ImportError:
+    furniture_library = None
 
 shapes = json.loads(open(shapes_path).read())
 
@@ -38,18 +45,24 @@ def material(name, rgb):
     return mat
 
 
-wall_i = floor_i = 0
+counters = {}
+
+
+def next_name(base):
+    counters[base] = counters.get(base, 0) + 1
+    return base if counters[base] == 1 else f"{base}_{counters[base]}"
+
+
 for plane in shapes["planes"]:
+    label = plane.get("label") or (
+        "floor" if plane["kind"] == "floor_or_ceiling" else "wall")
+    if label == "ceiling":
+        continue  # keep renders and editing unobstructed
     a = Vector(plane["axis_a"])
     b = Vector(plane["axis_b"])
     n = Vector(plane["normal"])
     center = Vector(plane["center"])
-    if plane["kind"] == "floor_or_ceiling":
-        floor_i += 1
-        name = f"Floor_{floor_i}" if floor_i > 1 else "Floor"
-    else:
-        wall_i += 1
-        name = f"Wall_{wall_i}"
+    name = next_name(label.capitalize())
     bpy.ops.mesh.primitive_plane_add(size=2)
     obj = bpy.context.active_object
     obj.name = name
@@ -63,12 +76,17 @@ for plane in shapes["planes"]:
 
 for i, box in enumerate(shapes["boxes"], 1):
     lo, hi = Vector(box["min"]), Vector(box["max"])
-    bpy.ops.mesh.primitive_cube_add(size=1)
-    obj = bpy.context.active_object
-    obj.name = f"Furniture_{i}"
-    obj.location = (lo + hi) / 2
-    obj.scale = hi - lo
-    obj.data.materials.append(material(obj.name, box["color"]))
+    label = box.get("label", "block")
+    name = next_name(label.capitalize())
+    if furniture_library is not None:
+        furniture_library.build(label, name, list(lo), list(hi), box["color"])
+    else:
+        bpy.ops.mesh.primitive_cube_add(size=1)
+        obj = bpy.context.active_object
+        obj.name = name
+        obj.location = (lo + hi) / 2
+        obj.scale = hi - lo
+        obj.data.materials.append(material(name, box["color"]))
 
 # camera + light framing the WHOLE scene bound
 corners = []

@@ -142,9 +142,13 @@ def main():
     else:
         pts, cols = cloud.points.astype(np.float64), cloud.colors
 
-    models = sorted((space / "workspace" / "sparse").iterdir())
-    up = estimate_up(models[-1] if len(models) == 1 else
-                     max(models, key=lambda d: (d / "points3D.bin").stat().st_size))
+    sparse_dir = space / "workspace" / "sparse"
+    if sparse_dir.exists():
+        models = sorted(sparse_dir.iterdir())
+        up = estimate_up(models[-1] if len(models) == 1 else
+                         max(models, key=lambda d: (d / "points3D.bin").stat().st_size))
+    else:
+        up = np.array([0.0, 0.0, 1.0])  # no camera solve: assume Z-up
     print(f"up vector: {np.round(up, 3)}")
 
     # world frame: up = +Z
