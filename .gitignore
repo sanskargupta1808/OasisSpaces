@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.DS_Store
+nohup.out
+
+# captured spaces are personal data, and even the synthetic demo cloud is
+# a generated 7.7MB binary — regenerate it with scripts/make_sample.py
+# (the Render build does this at deploy time)
+spaces/
+.venv/

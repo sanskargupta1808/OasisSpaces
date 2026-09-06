@@ -1,0 +1,1 @@
+We want to create a system such that images for any space we get images from each and every angle those then gets stiched and then cloud of the whole thing gets formed such that we can edit any cloud created for the space. 
