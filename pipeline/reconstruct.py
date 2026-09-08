@@ -54,14 +54,44 @@ def require_binary(name: str, install_hint: str) -> None:
         sys.exit(f"{name} not found. Install it with: {install_hint}")
 
 
+def sharpness(path: Path) -> float:
+    """Higher = sharper. Variance of image gradients on a downscaled copy."""
+    from PIL import Image
+
+    img = Image.open(path).convert("L")
+    img.thumbnail((480, 480))
+    arr = np.asarray(img, dtype=np.float32)
+    gy, gx = np.gradient(arr)
+    return float((gx * gx + gy * gy).mean())
+
+
 def extract_frames(video: Path, images_dir: Path, fps: float, log: Path) -> None:
-    print(f"Extracting frames from {video.name} at {fps} fps")
+    """Extract at 3x the requested rate, keep the sharpest frame per window.
+
+    Motion blur varies frame to frame (hand shake, walking bounce); dense
+    extraction plus sharpness selection means a fast or shaky video still
+    contributes its crispest moments at the requested spacing.
+    """
+    oversample = 3
+    print(f"Extracting frames from {video.name} at {fps} fps "
+          f"({oversample}x oversampled, keeping sharpest per window)")
     images_dir.mkdir(parents=True, exist_ok=True)
     run(
-        ["ffmpeg", "-y", "-i", str(video), "-vf", f"fps={fps}",
-         "-qscale:v", "2", str(images_dir / "frame_%05d.jpg")],
+        ["ffmpeg", "-y", "-i", str(video), "-vf", f"fps={fps * oversample}",
+         "-qscale:v", "2", str(images_dir / "candidate_%05d.jpg")],
         log,
     )
+    candidates = sorted(images_dir.glob("candidate_*.jpg"))
+    kept = 0
+    for start in range(0, len(candidates), oversample):
+        window = candidates[start:start + oversample]
+        best = max(window, key=sharpness)
+        kept += 1
+        best.rename(images_dir / f"frame_{kept:05d}.jpg")
+        for other in window:
+            if other.exists():
+                other.unlink()
+    print(f"Kept {kept} sharpest frames of {len(candidates)} candidates")
 
 
 def collect_images(source: Path, images_dir: Path) -> int:
